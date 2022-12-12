@@ -216,8 +216,11 @@ class ConfigTester(object):
             modeling_source = fp.read()
             for x in parameter_names:
                 if f"config.{x}" not in modeling_source and f'getattr(config, "{x}"' not in modeling_source:
-                    if not x.endswith("_token_id"):
-                        raise ValueError(f"config.{x} not in the source")
+                    if x == "layer_norm_eps" and self.config_class.__name__ in ["BioGptConfig", "CLIPConfig", "CLIPSegConfig", "GLPNConfig", "GroupViTConfig", "LxmertConfig", "OwlViTConfig", "SegformerConfig", "XCLIPConfig"]:
+                        continue
+                    if x.endswith("_token_id"):
+                        continue
+                    raise ValueError(f"config.{x} not in the source.")
 
     def run_common_tests(self):
         # self.create_and_test_config_common_properties()
