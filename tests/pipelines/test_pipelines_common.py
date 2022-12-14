@@ -17,26 +17,19 @@ import importlib
 import logging
 import os
 import random
-import requests
-import string
 import sys
 import tempfile
 import unittest
 from abc import abstractmethod
-from functools import lru_cache
 from pathlib import Path
 from unittest import skipIf
 
-import huggingface_hub.utils
 import numpy as np
 
-from huggingface_hub import HfApi, HfFolder, Repository, delete_repo, set_access_token
+import requests
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
-    FEATURE_EXTRACTOR_MAPPING,
-    TOKENIZER_MAPPING,
-    AutoFeatureExtractor,
-    AutoImageProcessor,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
@@ -76,110 +69,11 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/tr
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
 spec = importlib.util.spec_from_file_location(
-    "transformers", os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), submodule_search_locations=[PATH_TO_TRANSFORMERS]
+    "transformers",
+    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
+    submodule_search_locations=[PATH_TO_TRANSFORMERS],
 )
 transformers_module = spec.loader.load_module()
-
-
-ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
-    "CamembertConfig",
-    "IBertConfig",
-    "LongformerConfig",
-    "MarkupLMConfig",
-    "RobertaConfig",
-    "XLMRobertaConfig",
-]
-
-
-def get_checkpoint_from_architecture(architecture):
-    try:
-        module = importlib.import_module(architecture.__module__)
-    except ImportError:
-        logger.error(f"Ignoring architecture {architecture}")
-        return
-
-    if hasattr(module, "_CHECKPOINT_FOR_DOC"):
-        return module._CHECKPOINT_FOR_DOC
-    else:
-        logger.warning(f"Can't retrieve checkpoint from {architecture.__name__}")
-
-
-def get_tiny_config_from_class(configuration_class):
-    if "OpenAIGPT" in configuration_class.__name__:
-        # This is the only file that is inconsistent with the naming scheme.
-        # Will rename this file if we decide this is the way to go
-        return
-
-    model_type = configuration_class.model_type
-    camel_case_model_name = configuration_class.__name__.split("Config")[0]
-
-    try:
-        model_slug = model_type.replace("-", "_")
-        module = importlib.import_module(f".test_modeling_{model_slug}", package=f"tests.models.{model_slug}")
-        model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
-    except (ImportError, AttributeError):
-        logger.error(f"No model tester class for {configuration_class.__name__}")
-        return
-
-    if model_tester_class is None:
-        logger.warning(f"No model tester class for {configuration_class.__name__}")
-        return
-
-    model_tester = model_tester_class(parent=None)
-
-    if hasattr(model_tester, "get_pipeline_config"):
-        config = model_tester.get_pipeline_config()
-    elif hasattr(model_tester, "get_config"):
-        config = model_tester.get_config()
-    else:
-        config = None
-        logger.warning(f"Model tester {model_tester_class.__name__} has no `get_config()`.")
-
-    return config
-
-
-@lru_cache(maxsize=100)
-def get_tiny_tokenizer_from_checkpoint(checkpoint):
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-    if tokenizer.vocab_size < 300:
-        # Wav2Vec2ForCTC for instance
-        # ByT5Tokenizer
-        # all are already small enough and have no Fast version that can
-        # be retrained
-        return tokenizer
-    logger.info("Training new from iterator ...")
-    vocabulary = string.ascii_letters + string.digits + " "
-    tokenizer = tokenizer.train_new_from_iterator(vocabulary, vocab_size=len(vocabulary), show_progress=False)
-    logger.info("Trained.")
-    return tokenizer
-
-
-def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_extractor_class):
-    try:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(checkpoint)
-    except Exception:
-        try:
-            if feature_extractor_class is not None:
-                feature_extractor = feature_extractor_class()
-            else:
-                feature_extractor = None
-        except Exception:
-            feature_extractor = None
-    if hasattr(tiny_config, "image_size") and feature_extractor:
-        feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
-
-    # Audio Spectogram Transformer specific.
-    if feature_extractor.__class__.__name__ == "ASTFeatureExtractor":
-        feature_extractor = feature_extractor.__class__(
-            max_length=tiny_config.max_length, num_mel_bins=tiny_config.num_mel_bins
-        )
-
-    # Speech2TextModel specific.
-    if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
-        feature_extractor = feature_extractor.__class__(
-            feature_size=tiny_config.input_feat_per_channel, num_mel_bins=tiny_config.input_feat_per_channel
-        )
-    return feature_extractor
 
 
 class ANY:
@@ -232,7 +126,10 @@ class PipelineTestCaseMeta(type):
                     if config_vocab_size is None and hasattr(model.config, "text_config"):
                         config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
                     if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
-                        raise ValueError("Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`.")
+                        raise ValueError(
+                            "Could not determine `vocab_size` from model configuration while `tokenizer` is not"
+                            " `None`."
+                        )
                     if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
                         self.skipTest("`tokenizer` has more than `config_vocab_size` tokens. Something is wrong.")
 
@@ -243,16 +140,6 @@ class PipelineTestCaseMeta(type):
                 # 1. for `BlenderbotForCausalLM`
                 if model_architecture.__name__ == "BlenderbotForCausalLM":
                     model.config.encoder_no_repeat_ngram_size = 0
-
-                # TODO: candidate for config_override
-                # # XLNet actually defines it as -1.
-                # if model.config.__class__.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
-                #     tokenizer.model_max_length = model.config.max_position_embeddings - 2
-                # elif (
-                #     hasattr(model.config, "max_position_embeddings")
-                #     and model.config.max_position_embeddings > 0
-                # ):
-                #     tokenizer.model_max_length = model.config.max_position_embeddings
 
                 pipeline, examples = self.get_test_pipeline(model, tokenizer, processor)
                 if pipeline is None:
@@ -317,8 +204,8 @@ class PipelineTestCaseMeta(type):
                         model_arch_name = model_architecture.__name__
                         # Get the canonical name
                         for _prefix in ["Flax", "TF"]:
-                             if model_arch_name.startswith(_prefix):
-                                model_arch_name = model_arch_name[len(_prefix):]
+                            if model_arch_name.startswith(_prefix):
+                                model_arch_name = model_arch_name[len(_prefix) :]
                                 break
 
                         repo_name = f"tiny-random-{model_arch_name}"
@@ -337,29 +224,54 @@ class PipelineTestCaseMeta(type):
 
                             if tokenizer_name is not None:
 
-                                if name == "QAPipelineTests" and not tokenizer_name.endswith("Fast") and config_class.__name__ in ["FlaubertConfig", "LongformerConfig", "MvpConfig", "XLMConfig", "ReformerConfig", "OPTConfig", "GPTJConfig"]:
+                                if (
+                                    name == "QAPipelineTests"
+                                    and not tokenizer_name.endswith("Fast")
+                                    and config_class.__name__
+                                    in [
+                                        "FlaubertConfig",
+                                        "LongformerConfig",
+                                        "MvpConfig",
+                                        "XLMConfig",
+                                        "ReformerConfig",
+                                        "OPTConfig",
+                                        "GPTJConfig",
+                                    ]
+                                ):
                                     # `QAPipelineTests` fails for a few models when the slower tokenizer are used. The
                                     # errors are of different types: no padding token, `ValueError: None is not in list`,
                                     # and `KeyError`, etc.
                                     # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
                                     # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
                                     continue
-                                elif name == "ZeroShotClassificationPipelineTests" and config_class.__name__ in ["OpenAIGPTConfig", "CTRLConfig"]:
+                                elif name == "ZeroShotClassificationPipelineTests" and config_class.__name__ in [
+                                    "OpenAIGPTConfig",
+                                    "CTRLConfig",
+                                ]:
                                     # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
                                     # (`OpenAIGPTConfig` and `CTRLConfig` were never used in pipeline tests, either because
                                     # of a missing checkpoint or because a tiny config could not be created)
                                     continue
-                                elif name == "TranslationPipelineTests" and config_class.__name__ in ["M2M100Config", "PLBartConfig"]:
+                                elif name == "TranslationPipelineTests" and config_class.__name__ in [
+                                    "M2M100Config",
+                                    "PLBartConfig",
+                                ]:
                                     # Get `ValueError: Translation requires a `src_lang` and a `tgt_lang` for this model`.
                                     # (`M2M100Config` and `PLBartConfig` were never used in pipeline tests: cannot create a
                                     # simple tokenizer)
                                     continue
-                                elif name == "TextGenerationPipelineTests" and config_class.__name__ in ["TransfoXLConfig", "ProphetNetConfig"]:
+                                elif name == "TextGenerationPipelineTests" and config_class.__name__ in [
+                                    "TransfoXLConfig",
+                                    "ProphetNetConfig",
+                                ]:
                                     # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
                                     # (`TransfoXLConfig` and `ProphetNetConfig` were never used in pipeline tests: cannot create a simple
                                     # tokenizer)
                                     continue
-                                elif name == "FillMaskPipelineTests" and config_class.__name__ in ["FlaubertConfig", "XLMConfig"]:
+                                elif name == "FillMaskPipelineTests" and config_class.__name__ in [
+                                    "FlaubertConfig",
+                                    "XLMConfig",
+                                ]:
                                     # Get `ValueError: AttributeError: 'NoneType' object has no attribute 'new_ones'` or `AssertionError`.
                                     # (`TransfoXLConfig` and `FlaubertConfig` were never used in pipeline tests: cannot create a simple
                                     # tokenizer)
@@ -367,23 +279,9 @@ class PipelineTestCaseMeta(type):
 
                             for processor_name in processor_names:
                                 test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
-                                dct[test_name] = gen_test(repo_name, model_architecture, tokenizer_name, processor_name)
-
-                        # else:
-                        #     try:
-                        #         tokenizer_name = AutoTokenizer.from_pretrained(repo_id).__class__.__name__
-                        #     except:
-                        #         pass
-                        #
-                        #     for auto_class in [AutoImageProcessor, AutoFeatureExtractor]:
-                        #         try:
-                        #             processor_name = auto_class.from_pretrained(repo_id).__class__.__name__
-                        #             break
-                        #         except:
-                        #             continue
-
-                        # test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
-                        # dct[test_name] = gen_test(repo_name, model_architecture, tokenizer_name, processor_name)
+                                dct[test_name] = gen_test(
+                                    repo_name, model_architecture, tokenizer_name, processor_name
+                                )
 
         @abstractmethod
         def inner(self):

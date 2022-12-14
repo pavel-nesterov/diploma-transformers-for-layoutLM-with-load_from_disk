@@ -275,7 +275,11 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             if config_class_from_processor_class != config_class:
                 processor = build_processor(config_class_from_processor_class, processor_class)
 
-    if processor is None and allow_no_checkpoint and (issubclass(processor_class, BaseImageProcessor) or issubclass(processor_class, FeatureExtractionMixin)):
+    if (
+        processor is None
+        and allow_no_checkpoint
+        and (issubclass(processor_class, BaseImageProcessor) or issubclass(processor_class, FeatureExtractionMixin))
+    ):
         try:
             processor = processor_class()
         except Exception as e:
