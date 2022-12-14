@@ -106,7 +106,11 @@ class PipelineTestCaseMeta(type):
                 processor = None
                 if processor_name is not None:
                     processor_class = getattr(transformers_module, processor_name)
-                    processor = processor_class.from_pretrained(repo_id)
+                    # If the required packages (like `Pillow`) are not installed, this will fail.
+                    try:
+                        processor = processor_class.from_pretrained(repo_id)
+                    except:
+                        self.skipTest("Failed to load processor")
 
                 model = None
                 try:
