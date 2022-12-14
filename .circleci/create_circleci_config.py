@@ -349,7 +349,7 @@ EXAMPLES_TESTS = [
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,
-    # pipelines_tf_job,
+    pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
 
