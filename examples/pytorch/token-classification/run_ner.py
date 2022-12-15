@@ -277,6 +277,24 @@ def main():
         features = raw_datasets["train"].features
     else:
         column_names = raw_datasets["validation"].column_names
+        print("raw_datasets['validation'].column_names:", raw_datasets["validation"].column_names)
+        print("raw_datasets['validation'].features:", raw_datasets["validation"].features)
+        # inspect the object raw_datasets["validation"]
+        print("raw_datasets", raw_datasets)       
+        # DatasetDict({
+        #     train: 
+        #         Dataset({
+        #             features: 
+        #                 ['Unnamed: 0', 'pixel_values', 'input_ids', 'attention_mask', 'bbox', 'labels'],
+        #                 num_rows: 3
+        #             })
+        #     validation: 
+        #         Dataset({
+        #             features: 
+        #                 ['Unnamed: 0', 'pixel_values', 'input_ids', 'attention_mask', 'bbox', 'labels'],
+        #                 num_rows: 5
+        #                 })
+        #         }) 
         features = raw_datasets["validation"].features
 
     if data_args.text_column_name is not None:
@@ -305,6 +323,9 @@ def main():
 
     # If the labels are of type ClassLabel, they are already integers and we have the map stored somewhere.
     # Otherwise, we have to get the list of labels manually.
+    print("label_column_name", label_column_name)
+    print("features[label_column_name]", features[label_column_name])
+    print("features", features)
     labels_are_int = isinstance(features[label_column_name].feature, ClassLabel)
     if labels_are_int:
         label_list = features[label_column_name].feature.names
