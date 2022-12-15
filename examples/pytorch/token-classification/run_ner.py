@@ -246,6 +246,12 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
+    print("data_args.dataset_name", data_args.dataset_name)
+    print("data_args.validation_file", data_args.validation_file)
+    print("data_args.train_file", data_args.train_file)
+    print("data_args.test_file", data_args.test_file)
+    print("data_args.validation_file", data_args.validation_file)
+        
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
