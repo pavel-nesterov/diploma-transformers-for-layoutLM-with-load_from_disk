@@ -270,6 +270,8 @@ def main():
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
+    print("training_args.do_train:", training_args.do_train)
+    print("raw_datasets.keys():", raw_datasets.keys())
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
         features = raw_datasets["train"].features
