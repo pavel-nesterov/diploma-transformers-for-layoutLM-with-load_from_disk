@@ -341,6 +341,8 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
+    print(f"model_args.model_name_or_path: {model_args.model_name_or_path}")
+    print(f"model_args.config_name: {model_args.config_name}")
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
