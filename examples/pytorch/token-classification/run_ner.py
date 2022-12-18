@@ -407,6 +407,7 @@ def main():
 
     # Map that sends B-Xxx label to its I-Xxx counterpart
     b_to_i_label = []
+    print(f"label_list: {label_list}")
     for idx, label in enumerate(label_list):
         if label.startswith("B-") and label.replace("B-", "I-") in label_list:
             b_to_i_label.append(label_list.index(label.replace("B-", "I-")))
