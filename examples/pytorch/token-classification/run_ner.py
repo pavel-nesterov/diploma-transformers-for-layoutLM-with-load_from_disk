@@ -216,6 +216,13 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+        
+    # print all the arguments
+    print('------- model_args ---------\n', model_args)
+    print('------- data_args ---------\n', data_args)
+    print('------- training_args ---------\n', training_args)
+    print('-------------------------------------')
+    
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -540,6 +547,7 @@ def main():
                 "f1": results["overall_f1"],
                 "accuracy": results["overall_accuracy"],
             }
+    processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -547,7 +555,8 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        #tokenizer=tokenizer,
+        tokenizer=processor,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
